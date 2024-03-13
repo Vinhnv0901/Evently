@@ -14,6 +14,10 @@ import Event from "../database/models/event.model";
 import Category from "../database/models/category.model";
 import { revalidatePath } from "next/cache";
 
+const getCategoryByName = async (name: string) => {
+  return Category.findOne({ name: { $regex: name, $options: "i" } });
+};
+
 export const createEvent = async ({
   event,
   userId,
@@ -31,6 +35,8 @@ export const createEvent = async ({
       category: event.categoryId,
       organizer: userId,
     });
+    revalidatePath(path);
+
     return JSON.parse(JSON.stringify(newEvent));
   } catch (error) {
     handleError(error);
@@ -63,26 +69,36 @@ export const getEventById = async (eventId: string) => {
   }
 };
 
-export const getAllEvents = async ({
+// GET ALL EVENTS
+export async function getAllEvents({
   query,
   limit = 6,
   page,
   category,
-}: GetAllEventsParams) => {
+}: GetAllEventsParams) {
   try {
     await connectToDatabase();
 
-    const conditions = {};
+    const titleCondition = query
+      ? { title: { $regex: query, $options: "i" } }
+      : {};
+    const categoryCondition = category
+      ? await getCategoryByName(category)
+      : null;
+    const conditions = {
+      $and: [
+        titleCondition,
+        categoryCondition ? { category: categoryCondition._id } : {},
+      ],
+    };
 
+    const skipAmount = (Number(page) - 1) * limit;
     const eventsQuery = Event.find(conditions)
-      .sort({ createAt: "desc" })
-      .skip(0)
+      .sort({ createdAt: "desc" })
+      .skip(skipAmount)
       .limit(limit);
 
-    //link and add needed informations of other field
     const events = await populateEvent(eventsQuery);
-
-    //count the number of events in database
     const eventsCount = await Event.countDocuments(conditions);
 
     return {
@@ -92,7 +108,7 @@ export const getAllEvents = async ({
   } catch (error) {
     handleError(error);
   }
-};
+}
 
 // DELETE
 export async function deleteEvent({ eventId, path }: DeleteEventParams) {
@@ -143,6 +159,35 @@ export async function getRelatedEventsByCategory({
     const conditions = {
       $and: [{ category: categoryId }, { _id: { $ne: eventId } }],
     };
+
+    const eventsQuery = Event.find(conditions)
+      .sort({ createdAt: "desc" })
+      .skip(skipAmount)
+      .limit(limit);
+
+    const events = await populateEvent(eventsQuery);
+    const eventsCount = await Event.countDocuments(conditions);
+
+    return {
+      data: JSON.parse(JSON.stringify(events)),
+      totalPages: Math.ceil(eventsCount / limit),
+    };
+  } catch (error) {
+    handleError(error);
+  }
+}
+
+// GET EVENTS BY ORGANIZER
+export async function getEventsByUser({
+  userId,
+  limit = 6,
+  page,
+}: GetEventsByUserParams) {
+  try {
+    await connectToDatabase();
+
+    const conditions = { organizer: userId };
+    const skipAmount = (page - 1) * limit;
 
     const eventsQuery = Event.find(conditions)
       .sort({ createdAt: "desc" })
