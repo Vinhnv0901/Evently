@@ -1,3 +1,9 @@
+![event](public/assets/images/event.png)
+The website allows users to play two roles: **event creators** and **ticket buyers**:
+
+- **Event creators** can create, delete, and update events.
+- **Ticket buyers** can view information and purchase tickets to attend those events.
+
 # Tech Stack
 
 - Node.js
